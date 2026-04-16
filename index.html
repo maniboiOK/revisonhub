@@ -93,11 +93,23 @@ $("#ownerBtn").onclick=()=>{if(ownerMode){ownerMode=false;$("#ownerBtn").textCon
 openDb().then(d=>{db=d;renderJump();renderSubjects();renderTopics();applyRoleUI();renderWorkspace()});
 </script>
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
-import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-analytics.js";
-import { getFirestore, doc, setDoc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-analytics.js";
+
+import { getFirestore, doc, setDoc, getDoc, updateDoc } 
+from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+
+import { getStorage, ref, uploadBytes, getDownloadURL } 
+from "https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js";
+
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } 
+from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+import { getStorage } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js";
+
+
+// 🔥 Firebase Config (your actual one)
 const firebaseConfig = {
   apiKey: "AIzaSyApWiXZopgpRO6lnhs1Jasz7n6zSWGD8tU",
   authDomain: "revisionhub-59cd7.firebaseapp.com",
@@ -108,26 +120,175 @@ const firebaseConfig = {
   measurementId: "G-BHPYYNCWPF"
 };
 
-const firebaseApp = initializeApp(firebaseConfig);
-window.firestoreAccess = {
-  db: getFirestore(firebaseApp),
-  doc,
-  setDoc,
-  getDoc,
-  updateDoc
+// 🔥 Init Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const firestoreDb = getFirestore(app);
+const storage = getStorage(app);
+const auth = getAuth(app);
+
+// ------------------------
+// 🧠 GLOBAL STATE
+// ------------------------
+window.currentUser = null;
+window.userRole = "viewer";
+
+window.roleRank = {
+  viewer: 0,
+  member: 1,
+  premium: 2,
+  exclusive: 3
 };
-window.authAccess = {
-  auth: getAuth(firebaseApp),
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut
-};
-onAuthStateChanged(window.authAccess.auth, (user) => {
-  if (window.handleAuthUser) window.handleAuthUser(user);
+
+// ------------------------
+// 🔐 ROLE LOGIC
+// ------------------------
+function hasRole(role){
+  return roleRank[userRole] >= roleRank[role];
+}
+
+function canDownload(){
+  return hasRole("premium");
+}
+
+function updateUI(){
+  const badge = document.getElementById("roleBadge");
+  if(badge) badge.innerText = userRole;
+}
+
+// ------------------------
+// 🔑 AUTH SYSTEM
+// ------------------------
+onAuthStateChanged(auth, async (user)=>{
+  currentUser = user;
+
+  if(user){
+    const snap = await getDoc(doc(db,"users",user.uid));
+    if(snap.exists()){
+      userRole = snap.data().role || "viewer";
+    }
+  } else {
+    userRole = "viewer";
+  }
+
+  updateUI();
+  loadFiles();
 });
-isSupported().then((supported) => {
-  if (supported) getAnalytics(firebaseApp);
-});
+
+// ------------------------
+// 📝 REGISTER
+// ------------------------
+async function register(){
+  const email = document.getElementById("accountEmail").value;
+  const pass = document.getElementById("accountPassword").value;
+
+  try{
+    const cred = await createUserWithEmailAndPassword(auth,email,pass);
+
+    await setDoc(doc(db,"users",cred.user.uid),{
+      email,
+      role:"viewer",
+      createdAt:Date.now()
+    });
+
+    alert("Registered successfully");
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+// ------------------------
+// 🔓 LOGIN
+// ------------------------
+async function login(){
+  const email = document.getElementById("accountEmail").value;
+  const pass = document.getElementById("accountPassword").value;
+
+  try{
+    await signInWithEmailAndPassword(auth,email,pass);
+    alert("Login successful");
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+// ------------------------
+// 🚪 LOGOUT
+// ------------------------
+async function logout(){
+  await signOut(auth);
+  userRole = "viewer";
+  updateUI();
+}
+
+// ------------------------
+// 📤 UPLOAD FILE
+// ------------------------
+async function uploadFile(file, subject, topic){
+  if(!currentUser){
+    alert("Login required");
+    return;
+  }
+
+  const path = `files/${subject}/${topic}/${Date.now()}_${file.name}`;
+  const storageRef = ref(storage, path);
+
+  await uploadBytes(storageRef, file);
+  const url = await getDownloadURL(storageRef);
+
+  await setDoc(doc(db,"files",crypto.randomUUID()),{
+    subject,
+    topic,
+    name:file.name,
+    url,
+    createdAt:Date.now()
+  });
+
+  loadFiles();
+}
+
+// ------------------------
+// 📥 LOAD FILES
+// ------------------------
+async function loadFiles(){
+  const snap = await getDocs(collection(db,"files"));
+  const container = document.getElementById("fileList");
+
+  if(!container) return;
+  container.innerHTML = "";
+
+  snap.forEach(docSnap=>{
+    const f = docSnap.data();
+
+    const div = document.createElement("div");
+    div.innerHTML = `
+      <b>${f.name}</b>
+      <button onclick="window.open('${f.url}')">Open</button>
+      ${canDownload() ? `<button onclick="downloadFile('${f.url}','${f.name}')">Download</button>` : ""}
+    `;
+
+    container.appendChild(div);
+  });
+}
+
+// ------------------------
+// ⬇️ DOWNLOAD
+// ------------------------
+function downloadFile(url,name){
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+}
+
+// ------------------------
+// 🌍 GLOBAL FUNCTIONS
+// ------------------------
+window.register = register;
+window.login = login;
+window.logout = logout;
+window.uploadFile = uploadFile;
+
 </script>
 </body>
 </html>
