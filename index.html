@@ -86,5 +86,24 @@ $("#searchBox").oninput=renderSubjects;$("#clearSearch").onclick=()=>{$("#search
 $("#ownerBtn").onclick=()=>{if(ownerMode){ownerMode=false;$("#ownerBtn").textContent="Owner mode";applyRoleUI();renderWorkspace()}else{$("#ownerDialog").showModal();$("#ownerPin").focus()}};$("#cancelOwner").onclick=()=>$("#ownerDialog").close();$("#unlockOwner").onclick=()=>{if($("#ownerPin").value===OWNER_PIN){ownerMode=true;$("#ownerBtn").textContent="Owner mode on";$("#ownerPin").value="";$("#ownerDialog").close();applyRoleUI();renderWorkspace()}else{$("#ownerPin").value="";$("#ownerPin").placeholder="Wrong PIN, try again"}};$("#ownerPin").onkeydown=e=>{if(e.key==="Enter")$("#unlockOwner").click()};
 openDb().then(d=>{db=d;renderJump();renderSubjects();renderTopics();applyRoleUI();renderWorkspace()});
 </script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
+import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-analytics.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyApWiXZopgpRO6lnhs1Jasz7n6zSWGD8tU",
+  authDomain: "revisionhub-59cd7.firebaseapp.com",
+  projectId: "revisionhub-59cd7",
+  storageBucket: "revisionhub-59cd7.firebasestorage.app",
+  messagingSenderId: "748116018074",
+  appId: "1:748116018074:web:b4fa0dde9e0b0cd2f2b023",
+  measurementId: "G-BHPYYNCWPF"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+isSupported().then((supported) => {
+  if (supported) getAnalytics(firebaseApp);
+});
+</script>
 </body>
 </html>
